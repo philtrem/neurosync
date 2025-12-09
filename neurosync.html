@@ -1,0 +1,748 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NeuroSync v4.9 | AM Noise Fix</title>
+    <style>
+        :root {
+            --bg-color: #1a2b3c;
+            --panel-bg: rgba(26, 43, 60, 0.95);
+            --panel-color: #243b53;
+            --accent-color: #64b5f6;
+            --text-color: #e0e6ed;
+            --danger-color: #ef5350;
+            --warn-color: #ffa726;
+            --success-color: #66bb6a;
+            --input-bg: #101923;
+            --input-border: #364f69;
+            --tooltip-bg: #101923;
+            --tooltip-border: #64b5f6;
+        }
+
+        body.night-mode {
+            --bg-color: #050505;
+            --panel-bg: rgba(20, 10, 5, 0.95);
+            --panel-color: #1a1008;
+            --accent-color: #ff9100;
+            --text-color: #aca19a;
+            --danger-color: #b71c1c;
+            --warn-color: #ff6f00;
+            --success-color: #bf360c;
+            --input-bg: #0d0500;
+            --input-border: #3e2723;
+            --tooltip-bg: #1a1008;
+            --tooltip-border: #ff9100;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            transition: background-color 0.5s, color 0.5s;
+        }
+
+        #strobe-overlay {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: white; opacity: 0;
+            pointer-events: none; z-index: 0;
+            mix-blend-mode: normal; will-change: opacity;
+        }
+
+        .container {
+            z-index: 10;
+            background: var(--panel-bg);
+            padding: 2rem;
+            border-radius: 12px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+            width: 90%; max-width: 500px;
+            margin-top: 2rem; margin-bottom: 2rem;
+            transition: all 0.3s ease; position: relative;
+        }
+
+        .header-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        h1 { margin: 0; font-weight: 300; letter-spacing: 2px; font-size: 1.8rem; }
+        .header-controls { display: flex; gap: 10px; }
+        .icon-btn {
+            background: transparent; border: 1px solid var(--input-border);
+            color: var(--text-color); padding: 8px; border-radius: 6px;
+            cursor: pointer; font-size: 1.2rem; line-height: 1; transition: all 0.2s;
+        }
+        .icon-btn:hover { background: rgba(255,255,255,0.1); }
+
+        .container.collapsed { width: auto; min-width: 200px; padding: 1rem; margin: 1rem; }
+        .container.collapsed .controls-wrapper { display: none; }
+        .container.collapsed h1 { font-size: 1.2rem; margin-right: 15px; }
+
+        .control-group {
+            background: var(--panel-color); padding: 15px;
+            border-radius: 8px; margin-bottom: 15px;
+            border: 1px solid rgba(255,255,255,0.05);
+        }
+
+        .group-title {
+            font-size: 0.8rem; text-transform: uppercase;
+            letter-spacing: 1.5px; margin-bottom: 10px;
+            color: var(--accent-color); opacity: 0.8;
+            display: flex; justify-content: space-between; align-items: center;
+        }
+
+        .slider-row { display: flex; align-items: center; margin-bottom: 8px; position: relative; }
+        .slider-label { flex: 0 0 70px; font-size: 0.9rem; cursor: help; border-bottom: 1px dotted rgba(255,255,255,0.2); }
+        input[type=range] { flex: 1; margin: 0 10px; cursor: pointer; accent-color: var(--accent-color); }
+        input[type=number] {
+            background: var(--input-bg); color: var(--accent-color);
+            border: 1px solid var(--input-border); padding: 4px; border-radius: 4px;
+            font-family: monospace; width: 60px; text-align: right;
+        }
+        input[type=color] { border: none; width: 30px; height: 30px; background: none; cursor: pointer; }
+        select {
+            background: var(--input-bg); color: var(--text-color);
+            border: 1px solid var(--input-border); padding: 2px 6px;
+            border-radius: 4px; font-size: 0.8rem; margin-left: auto; cursor: pointer;
+        }
+
+        .scan-btn {
+            background: var(--input-bg); border: 1px solid var(--input-border);
+            color: var(--text-color); width: 30px; height: 30px;
+            border-radius: 4px; cursor: pointer; margin: 0 2px;
+            display: flex; align-items: center; justify-content: center; font-weight: bold;
+        }
+        .scan-btn:hover { background: rgba(255,255,255,0.1); color: var(--accent-color); }
+        
+        #detect-btn {
+            font-size: 0.7rem; padding: 4px 8px; margin-left: 5px;
+            background: var(--accent-color); color: #1a1008;
+            border: none; border-radius: 4px; cursor: pointer; font-weight: bold;
+        }
+        #detect-btn:hover { opacity: 0.9; }
+        #detect-btn:disabled { background: #555; cursor: wait; }
+
+        .stats-box {
+            font-family: monospace; font-size: 0.75rem;
+            display: flex; gap: 8px; align-items: center;
+        }
+        .stat-item {
+            background: rgba(0,0,0,0.3); padding: 2px 6px;
+            border-radius: 4px; color: var(--text-color);
+            display: none;
+        }
+        .stat-item.visible { display: block; }
+        .stat-warn { color: var(--danger-color); font-weight: bold; }
+
+        .warning-box {
+            font-size: 0.85rem; padding: 10px;
+            border-radius: 4px; margin-top: 10px;
+            display: none; line-height: 1.4;
+        }
+        .warning-box.show { display: block; }
+        .warn-green { background: rgba(102, 187, 106, 0.2); border: 1px solid var(--success-color); }
+        .warn-orange { background: rgba(255, 167, 38, 0.2); border: 1px solid var(--warn-color); }
+        .warn-red { background: rgba(239, 83, 80, 0.2); border: 1px solid var(--danger-color); }
+
+        .btn-row { display: flex; gap: 10px; margin-top: 20px; }
+        button.action-btn {
+            flex: 1; padding: 12px; border: none; border-radius: 6px;
+            cursor: pointer; font-weight: bold; transition: background 0.2s;
+            text-transform: uppercase; font-size: 0.9rem;
+        }
+        #play-btn { background: var(--success-color); color: #1a2b3c; }
+        #play-btn:hover { background: #81c784; }
+        #play-btn.playing { background: var(--danger-color); color: white; }
+        #reset-btn { background: #546e7a; color: white; }
+
+        .unit { font-size: 0.8rem; opacity: 0.7; margin-left: 4px; width: 15px;}
+        #mode-label { font-size: 0.8rem; opacity: 0.5; margin-right: 10px; text-transform: uppercase; }
+
+        /* Custom Tooltip */
+        #custom-tooltip {
+            position: fixed;
+            background: var(--tooltip-bg);
+            border: 1px solid var(--tooltip-border);
+            color: var(--text-color);
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 0.8rem;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.2s;
+            z-index: 1000;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+            max-width: 200px;
+            line-height: 1.4;
+        }
+        #custom-tooltip.show { opacity: 1; }
+    </style>
+</head>
+<body>
+
+    <div id="strobe-overlay"></div>
+    <div id="custom-tooltip"></div>
+
+    <div class="container" id="main-ui">
+        <div class="header-row">
+            <div>
+                <h1>NEURO<span style="color:var(--accent-color)">SYNC</span></h1>
+                <span id="mode-label">Day Profile</span>
+            </div>
+            <div class="header-controls">
+                <button class="icon-btn" id="night-toggle" title="Toggle Day/Night Profile" data-tooltip="Switch between Day (Bright/Focus) and Night (Dark/Sleep) profiles.">🌙</button>
+                <button class="icon-btn" id="collapse-toggle" title="Collapse Panel" data-tooltip="Minimize the control panel to view the strobe effect without distractions.">_</button>
+            </div>
+        </div>
+
+        <div class="controls-wrapper">
+            <div class="control-group" id="visual-settings">
+                <div class="group-title">
+                    <span>Display & Visuals</span>
+                    <div class="stats-box">
+                        <div id="fps-item" class="stat-item">FPS: --</div>
+                        <div id="drop-item" class="stat-item" title="Dropped Frames">Drops: 0</div>
+                    </div>
+                </div>
+                <div class="slider-row">
+                    <label class="slider-label" data-tooltip="Your screen's refresh rate. Use 'Auto' to detect it precisely for jitter-free syncing.">Monitor</label>
+                    <input type="number" id="monitor-hz" value="60.00" step="0.01">
+                    <button id="detect-btn" data-tooltip="Automatically measures your screen's actual refresh rate (e.g., 59.94Hz or 144Hz).">Auto</button>
+                </div>
+                <div class="slider-row">
+                    <label class="slider-label" data-tooltip="Flashes the screen at the Brainwave Frequency to drive visual entrainment.">Strobe</label>
+                    <input type="checkbox" id="strobe-toggle">
+                    <span style="font-size: 0.8rem; opacity:0.7; margin-left: 10px;">Enable</span>
+                    <input type="checkbox" id="fps-toggle" style="margin-left: 15px;">
+                    <span style="flex:1; font-size: 0.8rem; opacity:0.7; margin-left: 5px;">Stats</span>
+                    <input type="color" id="strobe-color" value="#ffffff" title="Flicker Color" data-tooltip="The color of the strobe flash. Red is better for night/sleep.">
+                </div>
+                <div class="slider-row">
+                    <label class="slider-label" data-tooltip="Brightness/Opacity of the strobe flash. Lower this if the flickering is too intense.">Intensity</label>
+                    <input type="range" id="strobe-bright" min="0" max="100" value="100">
+                    <span class="unit" id="val-bright" style="width:30px; text-align:right">100</span>
+                </div>
+                <div id="jitter-warning" class="warning-box"></div>
+            </div>
+
+            <div class="control-group">
+                <div class="group-title">Brainwave (Speed)</div>
+                <div class="slider-row">
+                    <span class="slider-label" data-tooltip="The target frequency (Hz) for your brainwaves. 40Hz=Focus, 10Hz=Relax, 6Hz=Sleep.">Freq</span>
+                    <button class="scan-btn" id="scan-down" data-tooltip="Snap to the next lower frequency that syncs perfectly with your monitor.">«</button>
+                    <input type="range" id="brainwave" min="0.5" max="100" step="0.1" value="40">
+                    <button class="scan-btn" id="scan-up" data-tooltip="Snap to the next higher frequency that syncs perfectly with your monitor.">»</button>
+                    <input type="number" id="num-brainwave" value="40" step="0.1">
+                    <span class="unit">Hz</span>
+                </div>
+            </div>
+
+            <div class="control-group">
+                <div class="group-title">Modulation</div>
+                <div class="slider-row">
+                    <span class="slider-label" data-tooltip="Amplitude Modulation: How deeply the volume pulses. 100% = Full silence between pulses.">A-Mod</span>
+                    <input type="range" id="amod" min="0" max="100" value="100">
+                    <input type="number" id="num-amod" value="100">
+                    <span class="unit">%</span>
+                </div>
+                <div class="slider-row">
+                    <span class="slider-label" data-tooltip="Binaural Beats: Creates a phantom beat by playing slightly different tones in each ear. Requires headphones.">Binaural</span>
+                    <input type="range" id="binaural" min="0" max="100" value="0">
+                    <input type="number" id="num-binaural" value="0">
+                    <span class="unit">%</span>
+                </div>
+                <div class="slider-row">
+                    <span class="slider-label" data-tooltip="Frequency Modulation: Wobbly/Sci-fi effect that modulates the pitch.">F-Mod</span>
+                    <input type="range" id="fmod" min="0" max="100" value="0">
+                    <input type="number" id="num-fmod" value="0">
+                    <span class="unit">%</span>
+                </div>
+            </div>
+
+            <div class="control-group">
+                <div class="group-title">
+                    <span>Tone & Noise</span>
+                    <select id="noise-type" data-tooltip="Color of the background noise. Pink/Brown are deeper and more relaxing than White.">
+                        <option value="pink">Pink</option>
+                        <option value="brown">Brown</option>
+                        <option value="white">White</option>
+                    </select>
+                </div>
+                <div class="slider-row">
+                    <span class="slider-label" data-tooltip="The base pitch of the audio tone. Lower (100-200Hz) is usually more pleasant.">Carrier</span>
+                    <input type="range" id="carrier" min="50" max="1000" value="200">
+                    <input type="number" id="num-carrier" value="200">
+                    <span class="unit">Hz</span>
+                </div>
+                <div class="slider-row">
+                    <span class="slider-label" data-tooltip="Volume of the background noise. Good for blocking out external sounds.">Noise</span>
+                    <input type="range" id="noise" min="0" max="100" value="0">
+                    <input type="number" id="num-noise" value="0">
+                    <span class="unit">%</span>
+                </div>
+            </div>
+
+            <div class="control-group">
+                <div class="group-title">Master Volume</div>
+                <div class="slider-row">
+                    <span class="slider-label" data-tooltip="Controls the overall output level of both the Tone and the Noise.">Vol</span>
+                    <input type="range" id="volume" min="0" max="100" value="50">
+                    <input type="number" id="num-volume" value="50">
+                    <span class="unit">%</span>
+                </div>
+            </div>
+
+            <div class="btn-row">
+                <button class="action-btn" id="reset-btn" data-tooltip="Reset the current profile to factory defaults.">Reset Profile</button>
+                <button class="action-btn" id="play-btn" data-tooltip="Start or Stop the audio and visual stimulation.">Start Session</button>
+            </div>
+        </div>
+    </div>
+
+<script>
+/** DEFAULTS & STATE */
+const dayDefaults = {
+    modeName: 'day', brainwave: 40, amod: 100, binaural: 0, fmod: 0,
+    carrier: 200, noise: 0, volume: 50, monitorHz: 60.00,
+    strobe: false, strobeColor: '#ffffff', strobeBright: 100,
+    noiseType: 'pink', showFPS: false
+};
+const nightDefaults = {
+    modeName: 'night', brainwave: 6, amod: 100, binaural: 20, fmod: 0,
+    carrier: 150, noise: 10, volume: 40, monitorHz: 60.00,
+    strobe: false, strobeColor: '#ff9100', strobeBright: 30,
+    noiseType: 'pink', showFPS: false
+};
+
+let currentMode = 'day'; 
+let settings = { ...dayDefaults };
+
+let audioCtx, masterGain, carrierGain, noiseGain;
+let oscL, oscR, noiseNode;
+let lfoAM, lfoAMGain, lfoFM, lfoFMGain;
+let isPlaying = false;
+let isCollapsed = false;
+
+// Improved Stats Logic
+let frameDeltas = []; 
+let lastFrameTime = 0;
+let droppedFrames = 0;
+
+/** AUDIO UTILS */
+function createNoiseBuffer(type) {
+    if (!audioCtx) return null;
+    const bufferSize = 2 * audioCtx.sampleRate;
+    const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+    const output = buffer.getChannelData(0);
+    if (type === 'white') { for (let i = 0; i < bufferSize; i++) output[i] = (Math.random()*2-1)*0.5; }
+    else if (type === 'pink') {
+        let b0=0,b1=0,b2=0,b3=0,b4=0,b5=0,b6=0;
+        for (let i=0; i<bufferSize; i++) {
+            const w = Math.random()*2-1;
+            b0 = 0.99886*b0 + w*0.0555179; b1 = 0.99332*b1 + w*0.0750759;
+            b2 = 0.96900*b2 + w*0.1538520; b3 = 0.86650*b3 + w*0.3104856;
+            b4 = 0.55000*b4 + w*0.5329522; b5 = -0.7616*b5 - w*0.0168981;
+            output[i] = (b0+b1+b2+b3+b4+b5+b6+w*0.5362)*0.11; b6 = w*0.115926;
+        }
+    } else if (type === 'brown') {
+        let last=0; for (let i=0;i<bufferSize;i++) {
+            const w = Math.random()*2-1; output[i] = (last+(0.02*w))/1.02; last=output[i]; output[i]*=3.5;
+        }
+    }
+    return buffer;
+}
+
+function updateNoiseSource() {
+    if (!audioCtx || !isPlaying) return;
+    if (noiseNode) { try { noiseNode.stop(); noiseNode.disconnect(); } catch(e){} }
+    noiseNode = audioCtx.createBufferSource();
+    noiseNode.buffer = createNoiseBuffer(settings.noiseType);
+    noiseNode.loop = true;
+    noiseNode.connect(noiseGain);
+    noiseNode.start();
+}
+
+function initAudioEngine() {
+    if (audioCtx) { audioCtx.resume(); return; }
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    
+    // Set flag immediately
+    isPlaying = true;
+
+    masterGain = audioCtx.createGain(); masterGain.connect(audioCtx.destination);
+    
+    // CarrierGain = The node that gets AM pulsed
+    carrierGain = audioCtx.createGain(); carrierGain.connect(masterGain);
+    
+    // FIX: Connect Noise to CarrierGain so it ALSO gets AM pulsed
+    noiseGain = audioCtx.createGain(); noiseGain.connect(carrierGain);
+    
+    oscL = audioCtx.createOscillator(); oscR = audioCtx.createOscillator();
+    oscL.connect(carrierGain); oscR.connect(carrierGain);
+    
+    lfoAM = audioCtx.createOscillator(); lfoAMGain = audioCtx.createGain();
+    lfoAM.connect(lfoAMGain); lfoAMGain.connect(carrierGain.gain);
+    
+    lfoFM = audioCtx.createOscillator(); lfoFMGain = audioCtx.createGain();
+    lfoFM.connect(lfoFMGain); lfoFMGain.connect(oscL.frequency); lfoFMGain.connect(oscR.frequency);
+
+    applySettingsToAudio(true);
+    updateNoiseSource();
+    
+    oscL.start(); oscR.start(); 
+    lfoAM.start(); lfoFM.start();
+}
+
+function applySettingsToAudio(immediate = false) {
+    if (!audioCtx) return;
+    const now = audioCtx.currentTime;
+    const ramp = immediate ? 0 : 0.1;
+    masterGain.gain.setTargetAtTime(settings.volume / 100, now, ramp);
+    noiseGain.gain.setTargetAtTime((settings.noise / 100) * 0.5, now, ramp);
+    
+    const halfBeat = (settings.brainwave / 2) * (settings.binaural / 100);
+    oscL.frequency.setTargetAtTime(settings.carrier - halfBeat, now, ramp);
+    oscR.frequency.setTargetAtTime(settings.carrier + halfBeat, now, ramp);
+    lfoFM.frequency.setTargetAtTime(settings.brainwave, now, ramp);
+    lfoAM.frequency.setTargetAtTime(settings.brainwave, now, ramp);
+    lfoFMGain.gain.setTargetAtTime((settings.fmod / 100) * 15, now, ramp);
+    
+    const depth = settings.amod / 100;
+    carrierGain.gain.setTargetAtTime(1 - (depth/2), now, ramp);
+    lfoAMGain.gain.setTargetAtTime(depth/2, now, ramp);
+}
+
+/** VISUAL LOOP */
+function visualLoop(timestamp) {
+    if (!isPlaying) { document.getElementById('strobe-overlay').style.opacity = 0; return; }
+    requestAnimationFrame(visualLoop);
+
+    // --- STATS ---
+    if (lastFrameTime !== 0) {
+        const delta = timestamp - lastFrameTime;
+        frameDeltas.push(delta);
+        if (frameDeltas.length > 10) frameDeltas.shift();
+        const avgDelta = frameDeltas.reduce((a,b)=>a+b,0) / frameDeltas.length;
+        
+        if (frameDeltas.length > 5 && delta > avgDelta * 1.3) {
+            droppedFrames++;
+            const dropItem = document.getElementById('drop-item');
+            dropItem.innerText = `Drops: ${droppedFrames}`;
+            dropItem.classList.add('stat-warn');
+            setTimeout(() => { if(droppedFrames>0) document.getElementById('drop-item').classList.remove('stat-warn'); }, 200);
+        }
+
+        if (droppedFrames % 5 === 0) {
+             const fps = Math.round(1000 / delta);
+             document.getElementById('fps-item').innerText = `FPS: ${fps}`;
+        }
+    }
+    lastFrameTime = timestamp;
+
+    const overlay = document.getElementById('strobe-overlay');
+    if (!settings.strobe) { overlay.style.opacity = 0; return; }
+
+    const period = 1000 / settings.brainwave;
+    const phase = timestamp % period;
+    
+    overlay.style.backgroundColor = settings.strobeColor;
+    if (phase < (period / 2)) {
+        overlay.style.opacity = settings.strobeBright / 100;
+    } else {
+        overlay.style.opacity = 0;
+    }
+}
+
+/** AUTO-DETECT HZ LOGIC */
+function startHzDetection() {
+    const btn = document.getElementById('detect-btn');
+    btn.disabled = true;
+    btn.innerText = "...";
+    
+    let start = performance.now();
+    let frames = 0;
+    
+    function loop() {
+        frames++;
+        const now = performance.now();
+        if (now - start >= 1000) {
+            const duration = now - start;
+            const detectedHz = (frames * 1000) / duration;
+            settings.monitorHz = Math.round(detectedHz * 100) / 100;
+            document.getElementById('monitor-hz').value = settings.monitorHz;
+            btn.innerText = "Auto";
+            btn.disabled = false;
+            autoSnapToMonitor(true);
+            saveProfile();
+        } else {
+            requestAnimationFrame(loop);
+        }
+    }
+    requestAnimationFrame(loop);
+}
+
+/** AUTO ADJUST LOGIC */
+function getSupportedFrequencies() {
+    const monitor = settings.monitorHz;
+    const freqs = [];
+    for (let i = 1; i <= monitor * 2; i++) {
+        const freq = monitor / i;
+        if (freq >= 0.5 && freq <= 100) freqs.push(freq);
+    }
+    return freqs.sort((a, b) => a - b);
+}
+
+function scanFrequency(direction) {
+    const supported = getSupportedFrequencies();
+    const current = settings.brainwave;
+    let closestIndex = 0; let minDiff = Infinity;
+    supported.forEach((f, i) => {
+        const diff = Math.abs(f - current);
+        if (diff < minDiff) { minDiff = diff; closestIndex = i; }
+    });
+    let newIndex = direction === 'up' ? closestIndex + 1 : closestIndex - 1;
+    if (newIndex < 0) newIndex = 0;
+    if (newIndex >= supported.length) newIndex = supported.length - 1;
+    
+    const formatted = Math.round(supported[newIndex] * 100) / 100;
+    settings.brainwave = formatted;
+    document.getElementById('brainwave').value = formatted;
+    document.getElementById('num-brainwave').value = formatted;
+    
+    saveProfile();
+    if(isPlaying) applySettingsToAudio();
+    calculateJitter();
+}
+
+function autoSnapToMonitor(force = false) {
+    const currentHz = settings.brainwave;
+    const idealDivisor = Math.max(1, Math.round(settings.monitorHz / currentHz));
+    const newFreq = settings.monitorHz / idealDivisor;
+    const diff = Math.abs(newFreq - currentHz);
+    
+    if (force || diff > 0.1) {
+        settings.brainwave = Math.round(newFreq * 100) / 100;
+        document.getElementById('brainwave').value = settings.brainwave;
+        document.getElementById('num-brainwave').value = settings.brainwave;
+        saveProfile();
+        if(isPlaying) applySettingsToAudio();
+        calculateJitter();
+    }
+}
+
+/** UI HELPERS & TOOLTIPS */
+const map = [
+    { key: 'brainwave', slider: 'brainwave', num: 'num-brainwave' },
+    { key: 'amod',      slider: 'amod',      num: 'num-amod' },
+    { key: 'binaural',  slider: 'binaural',  num: 'num-binaural' },
+    { key: 'fmod',      slider: 'fmod',      num: 'num-fmod' },
+    { key: 'carrier',   slider: 'carrier',   num: 'num-carrier' },
+    { key: 'noise',     slider: 'noise',     num: 'num-noise' },
+    { key: 'volume',    slider: 'volume',    num: 'num-volume' }
+];
+
+function saveProfile() {
+    const key = currentMode === 'night' ? 'neurosync_night' : 'neurosync_day';
+    localStorage.setItem(key, JSON.stringify(settings));
+}
+function loadProfile(mode) {
+    currentMode = mode;
+    const key = mode === 'night' ? 'neurosync_night' : 'neurosync_day';
+    const defaults = mode === 'night' ? nightDefaults : dayDefaults;
+    const saved = localStorage.getItem(key);
+    settings = saved ? { ...defaults, ...JSON.parse(saved) } : { ...defaults };
+    localStorage.setItem('neurosync_last_mode', mode);
+}
+
+function renderUI() {
+    map.forEach(item => {
+        document.getElementById(item.slider).value = settings[item.key];
+        document.getElementById(item.num).value = settings[item.key];
+    });
+    document.getElementById('monitor-hz').value = settings.monitorHz;
+    document.getElementById('strobe-toggle').checked = settings.strobe;
+    document.getElementById('strobe-color').value = settings.strobeColor;
+    document.getElementById('strobe-bright').value = settings.strobeBright;
+    document.getElementById('val-bright').innerText = settings.strobeBright;
+    document.getElementById('noise-type').value = settings.noiseType;
+    document.getElementById('fps-toggle').checked = settings.showFPS;
+
+    const items = document.querySelectorAll('.stat-item');
+    items.forEach(el => el.classList.toggle('visible', settings.showFPS));
+
+    const body = document.body;
+    const nightBtn = document.getElementById('night-toggle');
+    const label = document.getElementById('mode-label');
+    if (currentMode === 'night') {
+        body.classList.add('night-mode'); nightBtn.innerText = "☀️"; label.innerText = "Night Profile";
+    } else {
+        body.classList.remove('night-mode'); nightBtn.innerText = "🌙"; label.innerText = "Day Profile";
+    }
+    calculateJitter();
+    if(isPlaying) { applySettingsToAudio(); updateNoiseSource(); }
+}
+
+function toggleProfile() { saveProfile(); loadProfile(currentMode==='day'?'night':'day'); renderUI(); }
+function toggleCollapse() {
+    isCollapsed = !isCollapsed;
+    const ui = document.getElementById('main-ui');
+    ui.classList.toggle('collapsed', isCollapsed);
+    document.getElementById('collapse-toggle').innerText = isCollapsed ? "□" : "_";
+}
+
+// Tooltip System
+let tooltipTimer;
+const tooltipEl = document.getElementById('custom-tooltip');
+
+function showTooltip(text, x, y) {
+    tooltipEl.innerText = text;
+    tooltipEl.classList.add('show');
+    
+    // Position check to stay on screen
+    const rect = tooltipEl.getBoundingClientRect();
+    let top = y + 15;
+    let left = x + 15;
+    
+    if (left + rect.width > window.innerWidth) left = window.innerWidth - rect.width - 10;
+    if (top + rect.height > window.innerHeight) top = y - rect.height - 5;
+    
+    tooltipEl.style.top = top + 'px';
+    tooltipEl.style.left = left + 'px';
+}
+
+function hideTooltip() {
+    tooltipEl.classList.remove('show');
+}
+
+function bindEvents() {
+    map.forEach(item => {
+        const slider = document.getElementById(item.slider);
+        const num = document.getElementById(item.num);
+        slider.addEventListener('input', (e) => {
+            const val = parseFloat(e.target.value);
+            settings[item.key] = val; num.value = val;
+            saveProfile(); if(isPlaying) applySettingsToAudio();
+            if(item.key === 'brainwave') calculateJitter();
+        });
+        num.addEventListener('input', (e) => {
+            const val = parseFloat(e.target.value);
+            if(!isNaN(val)) {
+                settings[item.key] = val; slider.value = val;
+                saveProfile(); if(isPlaying) applySettingsToAudio();
+                if(item.key === 'brainwave') calculateJitter();
+            }
+        });
+    });
+
+    document.getElementById('monitor-hz').addEventListener('change', (e) => {
+        settings.monitorHz = parseFloat(e.target.value);
+        if(settings.strobe) autoSnapToMonitor(true); 
+        else calculateJitter();
+        saveProfile();
+    });
+
+    document.getElementById('detect-btn').addEventListener('click', startHzDetection);
+
+    document.getElementById('strobe-toggle').addEventListener('change', (e) => {
+        settings.strobe = e.target.checked;
+        if (settings.strobe) autoSnapToMonitor(true);
+        saveProfile(); calculateJitter(); renderUI();
+    });
+
+    document.getElementById('strobe-color').addEventListener('input', (e) => { settings.strobeColor = e.target.value; saveProfile(); });
+    document.getElementById('strobe-bright').addEventListener('input', (e) => {
+        settings.strobeBright = parseInt(e.target.value);
+        document.getElementById('val-bright').innerText = settings.strobeBright; saveProfile();
+    });
+    document.getElementById('noise-type').addEventListener('change', (e) => {
+        settings.noiseType = e.target.value; saveProfile(); updateNoiseSource();
+    });
+    document.getElementById('night-toggle').addEventListener('click', toggleProfile);
+    document.getElementById('collapse-toggle').addEventListener('click', toggleCollapse);
+    document.getElementById('scan-up').addEventListener('click', () => scanFrequency('up'));
+    document.getElementById('scan-down').addEventListener('click', () => scanFrequency('down'));
+    
+    document.getElementById('fps-toggle').addEventListener('change', (e) => {
+        settings.showFPS = e.target.checked;
+        saveProfile(); renderUI();
+    });
+
+    // Tooltip Event Delegation
+    document.body.addEventListener('mouseover', (e) => {
+        const target = e.target.closest('[data-tooltip]');
+        if (target) {
+            const text = target.getAttribute('data-tooltip');
+            tooltipTimer = setTimeout(() => {
+                showTooltip(text, e.clientX, e.clientY);
+            }, 250);
+        }
+    });
+
+    document.body.addEventListener('mouseout', (e) => {
+        const target = e.target.closest('[data-tooltip]');
+        if (target) {
+            clearTimeout(tooltipTimer);
+            hideTooltip();
+        }
+    });
+    
+    document.body.addEventListener('mousemove', (e) => {
+        if(tooltipEl.classList.contains('show')) {
+            // Keep tooltip static or allow small tracking? Static is usually better UX.
+        }
+    });
+}
+
+function calculateJitter() {
+    const refresh = parseFloat(settings.monitorHz);
+    const target = parseFloat(settings.brainwave);
+    if (target <= 0) return;
+    const div = refresh / target;
+    const rounded = Math.round(div);
+    const diff = Math.abs(div - rounded);
+    const warnBox = document.getElementById('jitter-warning');
+
+    if (!settings.strobe) { warnBox.className = "warning-box"; return; }
+    warnBox.className = "warning-box show";
+    if (diff < 0.005) {
+        warnBox.className += " warn-green";
+        warnBox.innerHTML = `<strong>Perfect Sync!</strong> 1 flash every ${rounded} frames`;
+    } else if (diff < 0.2) {
+        const ideal = (refresh / Math.round(div)).toFixed(2);
+        warnBox.className += " warn-orange";
+        warnBox.innerHTML = `Micro-Jitter. Try <strong>${ideal}Hz</strong>`;
+    } else {
+        warnBox.className += " warn-red";
+        warnBox.innerHTML = `<strong>Heavy Jitter</strong>`;
+    }
+}
+
+document.getElementById('play-btn').addEventListener('click', function() {
+    if (!isPlaying) {
+        initAudioEngine();
+        this.innerText = "Stop Session"; this.classList.add('playing');
+        lastFrameTime = 0; droppedFrames = 0; frameDeltas = [];
+        requestAnimationFrame(visualLoop);
+    } else {
+        if (audioCtx) { audioCtx.close().then(() => { audioCtx = null; }); }
+        isPlaying = false;
+        this.innerText = "Start Session"; this.classList.remove('playing');
+        document.getElementById('strobe-overlay').style.opacity = 0;
+    }
+});
+
+document.getElementById('reset-btn').addEventListener('click', () => {
+    if(confirm(`Reset ${currentMode.toUpperCase()} profile?`)) {
+        localStorage.removeItem(currentMode === 'night' ? 'neurosync_night' : 'neurosync_day');
+        loadProfile(currentMode); renderUI();
+    }
+});
+
+const lastMode = localStorage.getItem('neurosync_last_mode') || 'day';
+loadProfile(lastMode); bindEvents(); renderUI();
+
+</script>
+</body>
+</html>
